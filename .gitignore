@@ -1,0 +1,26 @@
+# Virtual environment
+venv/
+env/
+ENV/
+
+# Vector database & indices
+chroma_db/
+
+# Python cache & bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Secrets and environment configurations
+.env
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# IDE & temporary directories
+.idea/
+.vscode/
+.freebuff/
+*.log

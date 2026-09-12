@@ -1,0 +1,152 @@
+[
+  {
+    "id": 1,
+    "question": "Which article establishes that India, that is Bharat, shall be a Union of States?",
+    "expected_articles": ["1"],
+    "expected_keywords": ["Union of States", "Bharat", "territory"]
+  },
+  {
+    "id": 2,
+    "question": "Which article guarantees equality before the law and equal protection of the laws within India?",
+    "expected_articles": ["14"],
+    "expected_keywords": ["equality", "protection of the laws"]
+  },
+  {
+    "id": 3,
+    "question": "Which article prohibits discrimination on grounds only of religion, race, caste, sex, or place of birth?",
+    "expected_articles": ["15"],
+    "expected_keywords": ["discrimination", "religion", "caste", "sex"]
+  },
+  {
+    "id": 4,
+    "question": "Which article guarantees equality of opportunity in matters of public employment?",
+    "expected_articles": ["16"],
+    "expected_keywords": ["employment", "appointment", "opportunity"]
+  },
+  {
+    "id": 5,
+    "question": "Which article abolishes untouchability and forbids its practice in any form?",
+    "expected_articles": ["17"],
+    "expected_keywords": ["untouchability", "abolished", "forbidden"]
+  },
+  {
+    "id": 6,
+    "question": "Which article protects freedom of speech and expression, peaceful assembly, and forming associations?",
+    "expected_articles": ["19"],
+    "expected_keywords": ["speech and expression", "assemble peaceably", "associations"]
+  },
+  {
+    "id": 7,
+    "question": "Which article provides protection in respect of conviction for offences against double jeopardy and self-incrimination?",
+    "expected_articles": ["20"],
+    "expected_keywords": ["conviction", "double jeopardy", "witness against himself"]
+  },
+  {
+    "id": 8,
+    "question": "Which article protects life and personal liberty, stating no person shall be deprived of life or personal liberty except according to procedure established by law?",
+    "expected_articles": ["21"],
+    "expected_keywords": ["life", "personal liberty", "procedure established by law"]
+  },
+  {
+    "id": 9,
+    "question": "Which article provides the right to free and compulsory education for all children aged six to fourteen years?",
+    "expected_articles": ["21A"],
+    "expected_keywords": ["education", "children", "six to fourteen"]
+  },
+  {
+    "id": 10,
+    "question": "Which article provides protection against arrest and detention in certain cases, including being informed of grounds of arrest?",
+    "expected_articles": ["22"],
+    "expected_keywords": ["arrest", "detention", "magistrate"]
+  },
+  {
+    "id": 11,
+    "question": "Which article prohibits human trafficking and begar or forced labour?",
+    "expected_articles": ["23"],
+    "expected_keywords": ["traffic in human beings", "begar", "forced labour"]
+  },
+  {
+    "id": 12,
+    "question": "Which article prohibits the employment of children below fourteen years of age in factories or mines?",
+    "expected_articles": ["24"],
+    "expected_keywords": ["children", "factories", "fourteen years", "hazardous employment"]
+  },
+  {
+    "id": 13,
+    "question": "Which article guarantees freedom of conscience and free profession, practice, and propagation of religion?",
+    "expected_articles": ["25"],
+    "expected_keywords": ["freedom of conscience", "religion", "propagate"]
+  },
+  {
+    "id": 14,
+    "question": "Which article grants the right to move the Supreme Court for enforcement of fundamental rights through writs?",
+    "expected_articles": ["32"],
+    "expected_keywords": ["Supreme Court", "remedies", "writs", "habeas corpus"]
+  },
+  {
+    "id": 15,
+    "question": "Which Directive Principle directs the State to take steps to organise village panchayats as units of self-government?",
+    "expected_articles": ["40"],
+    "expected_keywords": ["village panchayats", "self-government"]
+  },
+  {
+    "id": 16,
+    "question": "Which article provides that the State shall endeavour to secure for citizens a Uniform Civil Code throughout India?",
+    "expected_articles": ["44"],
+    "expected_keywords": ["uniform civil code", "citizens"]
+  },
+  {
+    "id": 17,
+    "question": "Which article directs the State to separate the judiciary from the executive in the public services?",
+    "expected_articles": ["50"],
+    "expected_keywords": ["separation of judiciary", "executive"]
+  },
+  {
+    "id": 18,
+    "question": "Which article lays down the Fundamental Duties of every citizen of India?",
+    "expected_articles": ["51A"],
+    "expected_keywords": ["fundamental duties", "duty of every citizen"]
+  },
+  {
+    "id": 19,
+    "question": "Which article empowers the President of India to grant pardons, reprieves, respites, or remissions of punishment?",
+    "expected_articles": ["72"],
+    "expected_keywords": ["pardons", "remit", "sentence", "President"]
+  },
+  {
+    "id": 20,
+    "question": "Which article provides for the appointment of the Attorney-General for India to advise the Government on legal matters?",
+    "expected_articles": ["76"],
+    "expected_keywords": ["Attorney-General", "legal advice", "President"]
+  },
+  {
+    "id": 21,
+    "question": "Which article defines what constitutes a Money Bill in Parliament?",
+    "expected_articles": ["110"],
+    "expected_keywords": ["Money Bill", "tax", "borrowing", "Consolidated Fund"]
+  },
+  {
+    "id": 22,
+    "question": "Which article provides for the establishment and constitution of the Supreme Court of India?",
+    "expected_articles": ["124"],
+    "expected_keywords": ["Supreme Court", "Chief Justice of India", "Judges"]
+  },
+  {
+    "id": 23,
+    "question": "Which article provides for the constitution of a Finance Commission by the President?",
+    "expected_articles": ["280"],
+    "expected_keywords": ["Finance Commission", "distribution", "taxes"]
+  },
+  {
+    "id": 24,
+    "question": "Which article vests the superintendence, direction, and control of elections in an Election Commission?",
+    "expected_articles": ["324"],
+    "expected_keywords": ["Election Commission", "elections", "superintendence"]
+  },
+  {
+    "id": 25,
+    "question": "Which article deals with the power of Parliament to amend the Constitution and procedure therefor?",
+    "expected_articles": ["368"],
+    "expected_keywords": ["amendment", "procedure", "Parliament"]
+  }
+]
