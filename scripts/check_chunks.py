@@ -1,27 +1,29 @@
-"""Diagnostic script to verify the quality of articles_chunked.json."""
+"""Diagnostic script to verify the quality and integrity of articles_chunked.json."""
 
 import json
 from collections import Counter
+from typing import Any
 
-INPUT_PATH = "data/articles_chunked.json"
+INPUT_PATH: str = "data/articles_chunked.json"
 
-FOOTNOTE_WORDS = ["subs.", "ins.", "rep.", "w.e.f.", "ibid", "omitted"]
+FOOTNOTE_WORDS: list[str] = ["subs.", "ins.", "rep.", "w.e.f.", "ibid", "omitted"]
 
 
-def main():
+def main() -> None:
+    """Run validation checks on chunk count, duplicates, short entries, and footnote leakage."""
     with open(INPUT_PATH, "r", encoding="utf-8") as f:
-        chunks = json.load(f)
+        chunks: list[dict[str, Any]] = json.load(f)
 
     print(f"Total chunks: {len(chunks)}")
-    main_count = sum(1 for c in chunks if c.get("source") == "main_body")
-    amend_count = sum(1 for c in chunks if c.get("source") == "amendment_act")
+    main_count: int = sum(1 for c in chunks if c.get("source") == "main_body")
+    amend_count: int = sum(1 for c in chunks if c.get("source") == "amendment_act")
     print(f"  Main body:      {main_count}")
     print(f"  Amendment acts: {amend_count}")
 
     # --- Article number distribution ---
-    nums = [c["article_number"] for c in chunks]
-    num_counts = Counter(nums)
-    duplicates = {n: cnt for n, cnt in num_counts.items() if cnt > 1}
+    nums: list[str] = [c["article_number"] for c in chunks]
+    num_counts: Counter[str] = Counter(nums)
+    duplicates: dict[str, int] = {n: cnt for n, cnt in num_counts.items() if cnt > 1}
     print(f"\nUnique article numbers: {len(num_counts)}")
     if duplicates:
         print(f"Duplicated numbers ({len(duplicates)}):")
@@ -42,18 +44,18 @@ def main():
               f"{c['title'][:60]}  ({len(c['text'])} chars)")
 
     # --- Short chunks (possible TOC junk) ---
-    short = [c for c in chunks if len(c["text"]) < 50]
+    short: list[dict[str, Any]] = [c for c in chunks if len(c["text"]) < 50]
     if short:
         print(f"\n--- Short chunks (< 50 chars): {len(short)} ---")
         for c in short:
             print(f"  Art {c['article_number']}: {c['text']!r}")
     else:
-        print(f"\nNo short chunks (< 50 chars) found.")
+        print("\nNo short chunks (< 50 chars) found.")
 
     # --- Footnote-like chunks that slipped through ---
-    suspect = []
+    suspect: list[dict[str, Any]] = []
     for c in chunks:
-        preview = (c["title"] + " " + c["text"][:80]).lower()
+        preview: str = (c["title"] + " " + c["text"][:80]).lower()
         if any(fw in preview for fw in FOOTNOTE_WORDS):
             suspect.append(c)
     if suspect:
@@ -64,7 +66,7 @@ def main():
         print("\nNo footnote-like chunks detected.")
 
     # --- Numeric coverage check for main body ---
-    main_nums = sorted(set(
+    main_nums: list[int] = sorted(set(
         int(c["article_number"].rstrip("ABCDEFGHIJKLMNOPQRSTUVWXYZ"))
         for c in chunks if c.get("source") == "main_body"
     ))
@@ -78,7 +80,7 @@ def main():
                   f"{sorted(missing)[:30]}{'...' if len(missing) > 30 else ''}")
 
     # --- Text length statistics ---
-    lengths = [len(c["text"]) for c in chunks]
+    lengths: list[int] = [len(c["text"]) for c in chunks]
     print(f"\nText length stats:")
     print(f"  Min:    {min(lengths)} chars")
     print(f"  Max:    {max(lengths)} chars")
@@ -89,7 +91,7 @@ def main():
     if 350 <= len(chunks) <= 450 and not short:
         print("PASS: Chunk count and quality look good.")
     else:
-        issues = []
+        issues: list[str] = []
         if not (350 <= len(chunks) <= 450):
             issues.append(f"count {len(chunks)} outside 350-450 range")
         if short:

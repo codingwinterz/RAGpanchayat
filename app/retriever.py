@@ -4,29 +4,34 @@ Prioritises main_body articles over amendment_act articles when both appear
 in the results for the same article number.
 """
 
+from typing import Any
 import chromadb
 from sentence_transformers import SentenceTransformer
 
-CHROMA_DIR = "chroma_db"
-COLLECTION_NAME = "constitution_articles"
-MODEL_NAME = "all-MiniLM-L6-v2"
+CHROMA_DIR: str = "chroma_db"
+COLLECTION_NAME: str = "constitution_articles"
+MODEL_NAME: str = "all-MiniLM-L6-v2"
 
 # Cosine distance threshold — lower is better (0 = identical).
 # Relevant constitutional queries typically score 0.25 - 0.65.
 # Out-of-scope queries (e.g. general knowledge, recipes) score > 0.75.
-SIMILARITY_THRESHOLD = 0.75
+SIMILARITY_THRESHOLD: float = 0.75
 
 # How many raw candidates to fetch before filtering/reranking.
-_RAW_TOP_K = 10
+_RAW_TOP_K: int = 10
 
 
 # Module-level singletons (loaded once on first import)
-_model = None
-_collection = None
+_model: SentenceTransformer | None = None
+_collection: Any = None
 
 
-def _load():
-    """Lazy-load the embedding model and ChromaDB collection."""
+def _load() -> tuple[SentenceTransformer, Any]:
+    """Lazy-load the embedding model and ChromaDB collection singleton instances.
+
+    Returns:
+        A tuple of (SentenceTransformer model, ChromaDB collection).
+    """
     global _model, _collection
     if _model is None:
         _model = SentenceTransformer(MODEL_NAME)
@@ -36,14 +41,19 @@ def _load():
     return _model, _collection
 
 
-def retrieve(question: str, top_k: int = 5):
+def retrieve(question: str, top_k: int = 5) -> list[dict[str, Any]]:
     """Embed the question and return the top-k most relevant article chunks.
 
-    Returns a list of dicts:
-        [{"article_number": "21", "title": "...", "text": "...",
-          "source": "main_body", "distance": 0.42}, ...]
-
     Main-body articles are boosted above amendment-act duplicates.
+
+    Args:
+        question: User query string to search for.
+        top_k: Maximum number of filtered chunks to return. Defaults to 5.
+
+    Returns:
+        A list of dicts:
+            [{"article_number": "21", "title": "...", "text": "...",
+              "source": "main_body", "distance": 0.42}, ...]
     """
     model, collection = _load()
 
@@ -60,7 +70,7 @@ def retrieve(question: str, top_k: int = 5):
     metas = results["metadatas"][0]
     dists = results["distances"][0]
 
-    candidates = []
+    candidates: list[dict[str, Any]] = []
     for doc, meta, dist in zip(docs, metas, dists):
         candidates.append({
             "article_number": meta["article_number"],
@@ -73,9 +83,9 @@ def retrieve(question: str, top_k: int = 5):
     # --- Prioritise main_body over amendment_act ---
     # For each article number, if both sources appear, keep main_body and
     # push amendment_act to the end (rather than removing it entirely).
-    seen_main = set()
-    prioritised = []
-    deferred = []
+    seen_main: set[str] = set()
+    prioritised: list[dict[str, Any]] = []
+    deferred: list[dict[str, Any]] = []
 
     for c in candidates:
         if c["source"] == "main_body":

@@ -1,15 +1,19 @@
+"""Extract raw text from official Constitution of India PDF using pdfplumber."""
+
 # pyrefly: ignore [missing-import]
 import pdfplumber
 
-PDF_PATH = "data/constitution.pdf"
-OUTPUT_PATH = "data/constitution_raw.txt"
+PDF_PATH: str = "data/constitution.pdf"
+OUTPUT_PATH: str = "data/constitution_raw.txt"
 
-def extract_text():
-    full_text = ""
+
+def extract_text() -> None:
+    """Extract page-by-page text from constitution.pdf and write to constitution_raw.txt."""
+    full_text: str = ""
     with pdfplumber.open(PDF_PATH) as pdf:
         print(f"Total pages: {len(pdf.pages)}")
         for i, page in enumerate(pdf.pages):
-            text = page.extract_text()
+            text: str | None = page.extract_text()
             if text:
                 full_text += text + "\n"
             if (i + 1) % 50 == 0:
@@ -20,6 +24,7 @@ def extract_text():
 
     print(f"Done. Extracted text saved to {OUTPUT_PATH}")
     print(f"Total characters: {len(full_text)}")
+
 
 if __name__ == "__main__":
     extract_text()

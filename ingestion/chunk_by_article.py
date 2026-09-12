@@ -1,8 +1,11 @@
+"""Chunk extracted Constitution text into structured article blocks."""
+
 import re
 import json
+from typing import Pattern
 
-INPUT_PATH = "data/constitution_raw.txt"
-OUTPUT_PATH = "data/articles_chunked.json"
+INPUT_PATH: str = "data/constitution_raw.txt"
+OUTPUT_PATH: str = "data/articles_chunked.json"
 
 # Matches article headings like:
 #   1. Name and territory of the Union.—(1) India, that is Bharat...
@@ -18,7 +21,7 @@ OUTPUT_PATH = "data/articles_chunked.json"
 # only 1 match for the whole document. Instead, we match each article's
 # first line and then extract the full body as the text between consecutive
 # article start positions.
-ARTICLE_PATTERN = re.compile(
+ARTICLE_PATTERN: Pattern[str] = re.compile(
     r'^(?P<num>\d{1,3}[A-Z]?)\.'           # article number at start of line
     r'\s+(?P<title>[^.]+?)\.'               # title (up to next period)
     r'[\u2013\u2014\u2212\u002D]'           # dash separator (en/em/minus/hyphen)
@@ -29,50 +32,70 @@ ARTICLE_PATTERN = re.compile(
 # The APPENDIX I section in the PDF marks the boundary between the main
 # Constitution body (Preamble + Articles 1-395 + Schedules) and the
 # standalone amendment act texts appended at the end.
-APPENDIX_MARKER = "APPENDIX I"
+APPENDIX_MARKER: str = "APPENDIX I"
 
-FOOTNOTE_MARKERS = ["Subs.", "Ins.", "Rep.", "w.e.f.", "ibid", "Omitted"]
+FOOTNOTE_MARKERS: list[str] = ["Subs.", "Ins.", "Rep.", "w.e.f.", "ibid", "Omitted"]
 
 
-def is_footnote(title, body_preview):
-    """Return True if the match looks like a footnote rather than a real article."""
-    combined = (title + " " + body_preview[:80]).lower()
+def is_footnote(title: str, body_preview: str) -> bool:
+    """Return True if the match looks like a footnote rather than a real article.
+
+    Args:
+        title: Extracted heading title string.
+        body_preview: First portion of the body text.
+
+    Returns:
+        True if suspect footnote markers are found in the snippet.
+    """
+    combined: str = (title + " " + body_preview[:80]).lower()
     return any(marker.lower() in combined for marker in FOOTNOTE_MARKERS)
 
 
-def find_appendix_boundary(text):
-    """Find where APPENDIX I starts (amendment acts section).
+def find_appendix_boundary(text: str) -> int:
+    """Find character offset where APPENDIX I starts (amendment acts section).
 
     We look for the *last* occurrence of 'APPENDIX I' at the start of a line,
     which is the actual appendix content (not a TOC reference).
+
+    Args:
+        text: Full raw text of the Constitution.
+
+    Returns:
+        Character index of the start of Appendix I, or length of text if not found.
     """
-    # Find all line-start occurrences of APPENDIX I
     matches = list(re.finditer(r'^APPENDIX\s+I\b', text, re.MULTILINE))
     if matches:
-        # Use the last substantial occurrence (the actual appendix, not TOC)
         return matches[-1].start()
-    return len(text)  # fallback: treat everything as main body
+    return len(text)
 
 
-def chunk_articles(text):
-    appendix_pos = find_appendix_boundary(text)
+def chunk_articles(text: str) -> list[dict[str, str]]:
+    """Parse raw Constitution text into article chunks with metadata.
+
+    Args:
+        text: Extracted raw text of the Constitution.
+
+    Returns:
+        A list of chunk dictionaries with article_number, title, source, and text.
+    """
+    appendix_pos: int = find_appendix_boundary(text)
     matches = list(ARTICLE_PATTERN.finditer(text))
-    chunks = []
+    chunks: list[dict[str, str]] = []
 
     for i, match in enumerate(matches):
-        num = match.group("num")
-        title = match.group("title").strip()
+        num: str = match.group("num")
+        title: str = match.group("title").strip()
 
         # Body = from this match's start to the next match's start
-        start = match.start()
-        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
-        full_text = text[start:end].strip()
+        start: int = match.start()
+        end: int = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        full_text: str = text[start:end].strip()
 
         if is_footnote(title, full_text):
             continue
 
         # Determine source based on position relative to appendix boundary
-        source = "amendment_act" if start >= appendix_pos else "main_body"
+        source: str = "amendment_act" if start >= appendix_pos else "main_body"
 
         chunks.append({
             "article_number": num,
@@ -84,17 +107,18 @@ def chunk_articles(text):
     return chunks
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Extract article chunks from constitution_raw.txt and save to articles_chunked.json."""
     with open(INPUT_PATH, "r", encoding="utf-8") as f:
-        raw_text = f.read()
+        raw_text: str = f.read()
 
-    chunks = chunk_articles(raw_text)
+    chunks: list[dict[str, str]] = chunk_articles(raw_text)
 
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
         json.dump(chunks, f, indent=2, ensure_ascii=False)
 
-    main_count = sum(1 for c in chunks if c["source"] == "main_body")
-    amend_count = sum(1 for c in chunks if c["source"] == "amendment_act")
+    main_count: int = sum(1 for c in chunks if c["source"] == "main_body")
+    amend_count: int = sum(1 for c in chunks if c["source"] == "amendment_act")
 
     print(f"Extracted {len(chunks)} article chunks.")
     print(f"  Main body:      {main_count}")
@@ -108,3 +132,7 @@ if __name__ == "__main__":
     for c in chunks[-3:]:
         print(f"\n[{c['source']}] Article {c['article_number']}: {c['title']}")
         print(c["text"][:200] + "...")
+
+
+if __name__ == "__main__":
+    main()

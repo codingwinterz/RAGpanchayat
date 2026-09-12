@@ -1,5 +1,6 @@
 """Streamlit Chat Interface for the Constitution of India RAG Chatbot."""
 
+from typing import Any
 import streamlit as st
 import requests
 
@@ -15,25 +16,43 @@ st.caption(
     "Every answer includes verified article citations."
 )
 
+
+def check_backend_health(health_url: str) -> tuple[bool, str]:
+    """Perform a health check on the backend API endpoint.
+
+    Args:
+        health_url: URL to the /health endpoint.
+
+    Returns:
+        A tuple of (is_healthy, status_message).
+    """
+    try:
+        resp: requests.Response = requests.get(health_url, timeout=2)
+        if resp.status_code == 200:
+            return True, "Backend Connected"
+        return False, f"Backend status: {resp.status_code}"
+    except Exception:
+        return False, "Backend Offline. Start via:\n`uvicorn app.main:app --reload`"
+
+
 # Sidebar configuration
 with st.sidebar:
     st.header("⚙️ Configuration")
-    api_url = st.text_input("Backend API Endpoint", value="http://127.0.0.1:8000/ask")
-    health_url = api_url.replace("/ask", "/health")
+    api_url: str = st.text_input("Backend API Endpoint", value="http://127.0.0.1:8000/ask")
+    health_url: str = api_url.replace("/ask", "/health")
 
     # Quick health check
-    try:
-        resp = requests.get(health_url, timeout=2)
-        if resp.status_code == 200:
-            st.success("✅ Backend Connected", icon="🟢")
-        else:
-            st.warning(f"⚠️ Backend status: {resp.status_code}")
-    except Exception:
-        st.error("❌ Backend Offline. Start via:\n`uvicorn app.main:app --reload`")
+    is_healthy, status_msg = check_backend_health(health_url)
+    if is_healthy:
+        st.success(f"✅ {status_msg}", icon="🟢")
+    elif "status:" in status_msg:
+        st.warning(f"⚠️ {status_msg}")
+    else:
+        st.error(f"❌ {status_msg}")
 
     st.divider()
     st.subheader("💡 Example Queries")
-    examples = [
+    examples: list[str] = [
         "What protections are provided under Article 21?",
         "Can the President grant pardons and remit sentences?",
         "What are the Fundamental Duties of Indian citizens?",
@@ -74,7 +93,7 @@ for msg in st.session_state.messages:
                     )
 
 # Determine user input (from chat box or example button)
-prompt = st.chat_input("Ask a question about the Constitution of India...")
+prompt: str | None = st.chat_input("Ask a question about the Constitution of India...")
 if "pending_prompt" in st.session_state and st.session_state["pending_prompt"]:
     prompt = st.session_state.pop("pending_prompt")
 
@@ -88,16 +107,16 @@ if prompt:
     with st.chat_message("assistant"):
         with st.spinner("Searching Constitution articles and generating answer..."):
             try:
-                response = requests.post(
+                response: requests.Response = requests.post(
                     api_url,
                     json={"question": prompt},
                     timeout=30,
                 )
                 if response.status_code == 200:
-                    data = response.json()
-                    answer = data.get("answer", "No answer received.")
-                    cited = data.get("cited_articles", [])
-                    sources = data.get("retrieved_sources", [])
+                    data: dict[str, Any] = response.json()
+                    answer: str = data.get("answer", "No answer received.")
+                    cited: list[str] = data.get("cited_articles", [])
+                    sources: list[dict[str, Any]] = data.get("retrieved_sources", [])
 
                     st.markdown(answer)
 
@@ -122,27 +141,27 @@ if prompt:
                         "sources": sources,
                     })
                 else:
-                    error_msg = f"API Error ({response.status_code}): {response.text}"
+                    error_msg: str = f"API Error ({response.status_code}): {response.text}"
                     st.error(error_msg)
                     st.session_state.messages.append({
                         "role": "assistant",
                         "content": error_msg,
                     })
             except requests.exceptions.ConnectionError:
-                error_msg = (
+                conn_err_msg: str = (
                     "Could not connect to the FastAPI server at "
                     f"`{api_url}`. Please make sure it is running via:\n\n"
                     "```bash\nuvicorn app.main:app --reload\n```"
                 )
-                st.error(error_msg)
+                st.error(conn_err_msg)
                 st.session_state.messages.append({
                     "role": "assistant",
-                    "content": error_msg,
+                    "content": conn_err_msg,
                 })
             except Exception as e:
-                error_msg = f"An unexpected error occurred: {str(e)}"
-                st.error(error_msg)
+                gen_err_msg: str = f"An unexpected error occurred: {str(e)}"
+                st.error(gen_err_msg)
                 st.session_state.messages.append({
                     "role": "assistant",
-                    "content": error_msg,
+                    "content": gen_err_msg,
                 })

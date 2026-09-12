@@ -2,6 +2,7 @@
 
 import sys
 import os
+from typing import Any
 
 # Add project root to path so `app.retriever` / `app.prompt` resolve correctly
 # when running from the project root with `uvicorn app.main:app`.
@@ -31,17 +32,19 @@ app.add_middleware(
 
 
 class AskRequest(BaseModel):
+    """Request schema for querying the Constitution of India chatbot."""
     question: str
 
 
 class AskResponse(BaseModel):
+    """Response schema containing the generated answer, cited articles, and retrieved source chunks."""
     answer: str
     cited_articles: list[str]
-    retrieved_sources: list[dict] | None = None
+    retrieved_sources: list[dict[str, Any]] | None = None
 
 
 @app.post("/ask", response_model=AskResponse)
-async def ask(req: AskRequest):
+async def ask(req: AskRequest) -> AskResponse:
     """Answer a question about the Constitution of India.
 
     1. Embed the question and retrieve top-k relevant article chunks.
@@ -49,6 +52,12 @@ async def ask(req: AskRequest):
        "I don't know" response without calling the LLM.
     3. Otherwise, pass the retrieved context + question to Gemini and
        return the generated answer with cited article numbers.
+
+    Args:
+        req: An AskRequest instance with the user's question.
+
+    Returns:
+        An AskResponse instance with answer text, citations, and source metadata.
     """
     chunks = retrieve(req.question, top_k=5)
 
@@ -61,7 +70,7 @@ async def ask(req: AskRequest):
         )
 
     # Build source summaries for the response (without full text)
-    sources = []
+    sources: list[dict[str, Any]] = []
     for c in chunks:
         label = c["article_number"]
         if c.get("source") == "amendment_act":
@@ -82,5 +91,10 @@ async def ask(req: AskRequest):
 
 
 @app.get("/health")
-async def health():
+async def health() -> dict[str, str]:
+    """Health check endpoint to verify backend service availability.
+
+    Returns:
+        A dictionary with the operational status of the service.
+    """
     return {"status": "ok"}
