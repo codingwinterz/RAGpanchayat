@@ -8,13 +8,13 @@ A domain-locked Retrieval-Augmented Generation (RAG) assistant that strictly ans
 
 ```mermaid
 flowchart TD
-    User([User Question]) --> Retriever[app/retriever.py\nEmbed query via all-MiniLM-L6-v2]
-    Retriever --> Chroma[ChromaDB chroma_db/\nCosine Similarity Search top-k=5]
+    User([User Question]) --> Retriever[app/retriever.py: Embed query via all-MiniLM-L6-v2]
+    Retriever --> Chroma[(ChromaDB: Cosine Similarity Search top-k=5)]
     Chroma --> Decision{Top Distance > 0.75?}
-    Decision -- Yes --> Fallback["I don't have information on that in the Constitution."\n(Skips LLM call completely)]
-    Decision -- No --> Prompt[app/prompt.py\nGrounded Prompt + Gemini 3.6 Flash]
-    Prompt --> API[app/main.py\nJSON Response with answer, cited_articles, retrieved_sources]
-    API --> UI[demo/streamlit_app.py\nInteractive Chat UI]
+    Decision -- Yes --> Fallback[Return fallback message: Skips LLM call completely]
+    Decision -- No --> Prompt[app/prompt.py: Grounded Prompt + Gemini 3.6 Flash]
+    Prompt --> API[app/main.py: JSON Response with answer, cited_articles, retrieved_sources]
+    API --> UI[demo/streamlit_app.py: Interactive Chat UI]
 ```
 
 ---
