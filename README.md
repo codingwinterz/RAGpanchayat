@@ -2,19 +2,6 @@
 
 A domain-locked Retrieval-Augmented Generation (RAG) assistant that strictly answers legal queries from the official **Constitution of India**, cites verified Article numbers, and rejects out-of-scope queries using distance guardrails.
 
----
-
-## 🖥️ Demo
-
-![Streamlit landing screen with example queries and backend status](docs/streamlit-landing.png)
-
-The landing screen shows backend connection status and a set of example queries to get started.
-
-![Streamlit chat interface answering a question about Money Bills, citing Article 110](docs/streamlit-demo.png)
-
-The chat UI answers grounded questions with full citations — here it correctly identifies Article 110 for a question about what constitutes a Money Bill, listing every clause and exception directly from the source text.
-
----
 
 ## 🏛️ System Architecture
 
