@@ -4,6 +4,18 @@ A domain-locked Retrieval-Augmented Generation (RAG) assistant that strictly ans
 
 ---
 
+## 🖥️ Demo
+
+![Streamlit landing screen with example queries and backend status](docs/streamlit-landing.png)
+
+The landing screen shows backend connection status and a set of example queries to get started.
+
+![Streamlit chat interface answering a question about Money Bills, citing Article 110](docs/streamlit-demo.png)
+
+The chat UI answers grounded questions with full citations — here it correctly identifies Article 110 for a question about what constitutes a Money Bill, listing every clause and exception directly from the source text.
+
+---
+
 ## 🏛️ System Architecture
 
 ```mermaid
@@ -48,6 +60,9 @@ flowchart TD
 │   └── run_eval.py               # Evaluation benchmark script measuring Top-1 and Top-k accuracy
 ├── demo/
 │   └── streamlit_app.py          # Streamlit chat interface with citation badges & source inspector
+├── docs/
+│   ├── streamlit-landing.png     # Landing screen screenshot used in this README
+│   └── streamlit-demo.png        # Q&A example screenshot used in this README
 ├── requirements.txt              # Project dependencies
 ├── .env.example                  # Environment variable template
 ├── .gitignore                    # Git ignore file for secrets, venv, and vector DB
