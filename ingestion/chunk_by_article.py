@@ -22,10 +22,17 @@ OUTPUT_PATH: str = "data/articles_chunked.json"
 # first line and then extract the full body as the text between consecutive
 # article start positions.
 ARTICLE_PATTERN: Pattern[str] = re.compile(
-    r'^(?P<num>\d{1,3}[A-Z]?)\.'           # article number at start of line
-    r'\s+(?P<title>[^.]+?)\.'               # title (up to next period)
-    r'[\u2013\u2014\u2212\u002D]'           # dash separator (en/em/minus/hyphen)
-    r'\s*(?P<body_start>.*)$',              # rest of that first line
+    r'^(?:[0-9*]*\[)?'                      # optional footnote prefix e.g. 2[ or 1[
+    r'(?P<num>\d{1,3}[A-Z]{0,2})\.'          # article number (e.g. 21, 21A, 243ZG)
+    r'\s+'                                  # whitespace after number
+    r'(?P<title>'
+    r'(?:[^\n\u2013\u2014\u2212]|'          # chars on same line (excluding em/en-dashes)
+    r'\n(?!\s*(?:(?:[0-9*]*\[)?\d{1,3}[A-Z]{0,2}\.|PART|CHAPTER|SCHEDULE|APPENDIX))' # newline if not next article/major heading
+    r')+?'
+    r')'
+    r'\.'                                   # title ends with a period
+    r'[\u2013\u2014\u2212\u002D]'          # dash separator (en/em/minus/hyphen)
+    r'\s*(?P<body_start>.*)$',             # rest of that line
     re.MULTILINE
 )
 
@@ -84,14 +91,20 @@ def chunk_articles(text: str) -> list[dict[str, str]]:
 
     for i, match in enumerate(matches):
         num: str = match.group("num")
-        title: str = match.group("title").strip()
+        raw_title: str = match.group("title").strip()
+
+        # Clean footnote bracket markers from title if present (e.g. "1[Power of..." -> "Power of...")
+        clean_title: str = re.sub(r'^[0-9*]*\[', '', raw_title)
+        if clean_title.endswith(']'):
+            clean_title = clean_title[:-1].strip()
+        clean_title = ' '.join(clean_title.split())
 
         # Body = from this match's start to the next match's start
         start: int = match.start()
         end: int = matches[i + 1].start() if i + 1 < len(matches) else len(text)
         full_text: str = text[start:end].strip()
 
-        if is_footnote(title, full_text):
+        if is_footnote(clean_title, full_text):
             continue
 
         # Determine source based on position relative to appendix boundary
@@ -99,7 +112,7 @@ def chunk_articles(text: str) -> list[dict[str, str]]:
 
         chunks.append({
             "article_number": num,
-            "title": title,
+            "title": clean_title,
             "source": source,
             "text": full_text
         })

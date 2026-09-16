@@ -1,11 +1,15 @@
-"""Retriever module: similarity search against the ChromaDB constitution index.
+"""Retriever module: hybrid search (vector + BM25) against the ChromaDB constitution index.
 
-Prioritises main_body articles over amendment_act articles when both appear
-in the results for the same article number.
+Combines ChromaDB cosine-similarity search with BM25 keyword search using
+Reciprocal Rank Fusion (RRF).  Prioritises main_body articles over
+amendment_act articles when both appear in the results for the same article
+number.
 """
 
 from typing import Any
 import chromadb
+import numpy as np
+from rank_bm25 import BM25Okapi
 from sentence_transformers import SentenceTransformer
 
 CHROMA_DIR: str = "chroma_db"
@@ -17,13 +21,27 @@ MODEL_NAME: str = "all-MiniLM-L6-v2"
 # Out-of-scope queries (e.g. general knowledge, recipes) score > 0.75.
 SIMILARITY_THRESHOLD: float = 0.75
 
-# How many raw candidates to fetch before filtering/reranking.
-_RAW_TOP_K: int = 10
+# How many raw candidates to fetch from *each* retrieval method
+# before RRF fusion. Wider pool gives RRF more signal.
+_RAW_TOP_K: int = 20
+
+# RRF constant (standard value from the original Cormack et al. paper).
+_RRF_K: int = 60
+
+# Toggle hybrid BM25 search
+ENABLE_BM25: bool = True
 
 
+# ---------------------------------------------------------------------------
 # Module-level singletons (loaded once on first import)
+# ---------------------------------------------------------------------------
 _model: SentenceTransformer | None = None
 _collection: Any = None
+
+# BM25 index + backing corpus
+_bm25: BM25Okapi | None = None
+_bm25_docs: list[str] | None = None
+_bm25_metas: list[dict[str, Any]] | None = None
 
 
 def _load() -> tuple[SentenceTransformer, Any]:
@@ -41,9 +59,107 @@ def _load() -> tuple[SentenceTransformer, Any]:
     return _model, _collection
 
 
+def _tokenize(text: str) -> list[str]:
+    """Simple whitespace tokenizer — works well for formal legal English."""
+    return text.lower().split()
+
+
+def _load_bm25() -> tuple[BM25Okapi, list[str], list[dict[str, Any]]]:
+    """Lazy-load BM25 index over the full ChromaDB corpus.
+
+    Fetches every document from the collection, tokenizes each one, and
+    builds a BM25Okapi index.  Cached as module-level singletons.
+
+    Returns:
+        A tuple of (BM25Okapi index, list of document texts, list of metadata dicts).
+    """
+    global _bm25, _bm25_docs, _bm25_metas
+    if _bm25 is None:
+        _, collection = _load()
+        all_data = collection.get(include=["documents", "metadatas"])
+        _bm25_docs = all_data["documents"]
+        _bm25_metas = all_data["metadatas"]
+        tokenized_corpus = [_tokenize(doc) for doc in _bm25_docs]
+        _bm25 = BM25Okapi(tokenized_corpus)
+    return _bm25, _bm25_docs, _bm25_metas
+
+
+# ---------------------------------------------------------------------------
+# Reciprocal Rank Fusion helper
+# ---------------------------------------------------------------------------
+
+def _reciprocal_rank_fusion(
+    vector_candidates: list[dict[str, Any]],
+    bm25_candidates: list[dict[str, Any]],
+    k: int = _RRF_K,
+) -> list[dict[str, Any]]:
+    """Merge two ranked result lists using Reciprocal Rank Fusion.
+
+    For every unique chunk (keyed by ``(article_number, source)``), the RRF
+    score is::
+
+        rrf = 1 / (k + rank_vector) + 1 / (k + rank_bm25)
+
+    Chunks present in only one list receive a penalty rank of
+    ``max(len(vector), len(bm25)) + 1``.
+
+    Args:
+        vector_candidates: Ranked results from ChromaDB vector search.
+        bm25_candidates: Ranked results from BM25 keyword search.
+        k: RRF smoothing constant (default 60).
+
+    Returns:
+        Merged list of candidate dicts sorted by descending RRF score.
+        Each dict carries an additional ``rrf_score`` key.
+    """
+    default_rank = max(len(vector_candidates), len(bm25_candidates)) + 1
+
+    # Build rank maps keyed by (article_number, source, text_hash)
+    def _key(c: dict[str, Any]) -> tuple[str, str, int]:
+        return (c["article_number"], c["source"], hash(c["text"]))
+
+    vec_rank: dict[tuple, int] = {}
+    vec_by_key: dict[tuple, dict[str, Any]] = {}
+    for rank, c in enumerate(vector_candidates, start=1):
+        key = _key(c)
+        if key not in vec_rank:          # keep best (first) rank
+            vec_rank[key] = rank
+            vec_by_key[key] = c
+
+    bm25_rank: dict[tuple, int] = {}
+    bm25_by_key: dict[tuple, dict[str, Any]] = {}
+    for rank, c in enumerate(bm25_candidates, start=1):
+        key = _key(c)
+        if key not in bm25_rank:
+            bm25_rank[key] = rank
+            bm25_by_key[key] = c
+
+    all_keys = set(vec_rank) | set(bm25_rank)
+    fused: list[dict[str, Any]] = []
+    for key in all_keys:
+        r_vec = vec_rank.get(key, default_rank)
+        r_bm25 = bm25_rank.get(key, default_rank)
+        rrf_score = 1.0 / (k + r_vec) + 1.0 / (k + r_bm25)
+
+        # Use the vector candidate if available (it carries the real distance),
+        # otherwise fall back to the BM25-only candidate.
+        candidate = dict(vec_by_key.get(key) or bm25_by_key[key])
+        candidate["rrf_score"] = round(rrf_score, 6)
+        fused.append(candidate)
+
+    fused.sort(key=lambda c: (c["rrf_score"], -c["distance"]), reverse=True)
+    return fused
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
 def retrieve(question: str, top_k: int = 5) -> list[dict[str, Any]]:
     """Embed the question and return the top-k most relevant article chunks.
 
+    Uses hybrid retrieval: ChromaDB vector similarity *and* BM25 keyword
+    search are run independently, then merged with Reciprocal Rank Fusion.
     Main-body articles are boosted above amendment-act duplicates.
 
     Args:
@@ -51,28 +167,33 @@ def retrieve(question: str, top_k: int = 5) -> list[dict[str, Any]]:
         top_k: Maximum number of filtered chunks to return. Defaults to 5.
 
     Returns:
-        A list of dicts:
+        A list of dicts::
+
             [{"article_number": "21", "title": "...", "text": "...",
-              "source": "main_body", "distance": 0.42}, ...]
+              "source": "main_body", "distance": 0.42,
+              "rrf_score": 0.032}, ...]
     """
     model, collection = _load()
 
+    # ------------------------------------------------------------------
+    # 1. Vector search (ChromaDB cosine similarity)
+    # ------------------------------------------------------------------
     query_embedding = model.encode(question, convert_to_numpy=True).tolist()
 
+    n_results = min(_RAW_TOP_K, collection.count())
     results = collection.query(
         query_embeddings=[query_embedding],
-        n_results=min(_RAW_TOP_K, collection.count()),
+        n_results=n_results,
         include=["documents", "metadatas", "distances"],
     )
 
-    # Unpack ChromaDB's nested list structure
-    docs = results["documents"][0]
-    metas = results["metadatas"][0]
-    dists = results["distances"][0]
+    docs_vec = results["documents"][0]
+    metas_vec = results["metadatas"][0]
+    dists_vec = results["distances"][0]
 
-    candidates: list[dict[str, Any]] = []
-    for doc, meta, dist in zip(docs, metas, dists):
-        candidates.append({
+    vector_candidates: list[dict[str, Any]] = []
+    for doc, meta, dist in zip(docs_vec, metas_vec, dists_vec):
+        vector_candidates.append({
             "article_number": meta["article_number"],
             "title": meta["title"],
             "source": meta.get("source", "main_body"),
@@ -80,9 +201,42 @@ def retrieve(question: str, top_k: int = 5) -> list[dict[str, Any]]:
             "distance": round(dist, 4),
         })
 
-    # --- Prioritise main_body over amendment_act ---
-    # For each article number, if both sources appear, keep main_body and
-    # push amendment_act to the end (rather than removing it entirely).
+    if ENABLE_BM25:
+        bm25, bm25_docs, bm25_metas = _load_bm25()
+
+        # ------------------------------------------------------------------
+        # 2. BM25 keyword search
+        # ------------------------------------------------------------------
+        query_tokens = _tokenize(question)
+        bm25_scores = bm25.get_scores(query_tokens)
+
+        # Pick top-_RAW_TOP_K indices by BM25 score
+        top_bm25_indices = np.argsort(bm25_scores)[::-1][:_RAW_TOP_K]
+
+        bm25_candidates: list[dict[str, Any]] = []
+        for idx in top_bm25_indices:
+            idx = int(idx)
+            if bm25_scores[idx] <= 0:
+                break  # no point including zero-score docs
+            meta = bm25_metas[idx]
+            bm25_candidates.append({
+                "article_number": meta["article_number"],
+                "title": meta["title"],
+                "source": meta.get("source", "main_body"),
+                "text": bm25_docs[idx],
+                "distance": 1.0,  # placeholder — will be overwritten by RRF if also in vector results
+            })
+
+        # ------------------------------------------------------------------
+        # 3. Reciprocal Rank Fusion
+        # ------------------------------------------------------------------
+        candidates = _reciprocal_rank_fusion(vector_candidates, bm25_candidates)
+    else:
+        candidates = vector_candidates
+
+    # ------------------------------------------------------------------
+    # 4. Prioritise main_body over amendment_act
+    # ------------------------------------------------------------------
     seen_main: set[str] = set()
     prioritised: list[dict[str, Any]] = []
     deferred: list[dict[str, Any]] = []
@@ -92,8 +246,6 @@ def retrieve(question: str, top_k: int = 5) -> list[dict[str, Any]]:
             seen_main.add(c["article_number"])
             prioritised.append(c)
         else:
-            # If we already have a main_body hit for this article number,
-            # defer the amendment-act duplicate.
             if c["article_number"] in seen_main:
                 deferred.append(c)
             else:
@@ -101,6 +253,8 @@ def retrieve(question: str, top_k: int = 5) -> list[dict[str, Any]]:
 
     ranked = prioritised + deferred
 
-    # Filter by threshold and trim to top_k
+    # ------------------------------------------------------------------
+    # 5. Filter by threshold and trim to top_k
+    # ------------------------------------------------------------------
     filtered = [c for c in ranked if c["distance"] <= SIMILARITY_THRESHOLD]
     return filtered[:top_k]

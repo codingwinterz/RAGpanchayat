@@ -29,7 +29,7 @@ flowchart TD
 ├── data/
 │   ├── constitution.pdf          # Official Constitution of India PDF (diglot edition)
 │   ├── constitution_raw.txt      # Raw extracted text from PDF
-│   ├── articles_chunked.json     # 409 extracted article chunks with metadata
+│   ├── articles_chunked.json     # 531 extracted article chunks with metadata
 │   └── overview_chunks.json      # 5 hand-written overview chunks for broad/summary topics
 ├── ingestion/
 │   ├── extract_text.py           # Extracts text from PDF to constitution_raw.txt
@@ -124,7 +124,7 @@ Run the pipeline steps in order:
    ```powershell
    python embeddings/build_index.py
    ```
-   *(Loads both `data/articles_chunked.json` and `data/overview_chunks.json`, indexing 414 total vectors).*
+   *(Loads both `data/articles_chunked.json` and `data/overview_chunks.json`, indexing 536 total vectors).*
 
 ---
 
@@ -197,17 +197,18 @@ python eval/run_eval.py
 ```
 
 ### Benchmark Results (Hybrid Search with MiniLM + BM25 + RRF)
-- **Top-1 Retrieval Accuracy:** **80.0%** (20/25 questions match exact target article at Rank #1)
-- **Top-5 Retrieval Accuracy:** **92.0%** (23/25 questions retrieve the target article within top 5)
+- **Top-1 Retrieval Accuracy:** **84.0%** (21/25 questions match exact target article at Rank #1)
+- **Top-5 Retrieval Accuracy:** **100.0%** (25/25 questions retrieve the target article within top 5)
 
 ### Configuration Comparison
 
-| Configuration | Model | Method | Top-1 Accuracy | Top-5 Accuracy | Index Build Time |
-|---|---|---|---|---|---|
-| **Original Baseline** | `all-MiniLM-L6-v2` | Pure Vector | 19/25 (76.0%) | 23/25 (92.0%) | ~8.0s |
-| **Hybrid (MiniLM) ⭐** | `all-MiniLM-L6-v2` | Vector + BM25 + RRF | **20/25 (80.0%)** | **23/25 (92.0%)** | **6.0s** |
-| **Pure Vector (mpnet)** | `all-mpnet-base-v2` | Pure Vector | 16/25 (64.0%) | 22/25 (88.0%) | 65.4s |
-| **Hybrid (mpnet)** | `all-mpnet-base-v2` | Vector + BM25 + RRF | 18/25 (72.0%) | 23/25 (92.0%) | 65.4s |
+| Configuration | Embedding Model | Retrieval Method | Top-1 Accuracy | Top-5 Accuracy | Index Build Time | Notes |
+|---|---|---|---|---|---|---|
+| **Original Baseline** | `all-MiniLM-L6-v2` | Pure Vector (409 chunks) | 19/25 (76.0%) | 23/25 (92.0%) | ~8.0s | Initial pure vector baseline |
+| **Pure Vector (mpnet)** | `all-mpnet-base-v2` | Pure Vector (409 chunks) | 16/25 (64.0%) | 22/25 (88.0%) | 65.4s | Abstract representations led to rank drift |
+| **Hybrid (mpnet)** | `all-mpnet-base-v2` | Vector + BM25 + RRF (409 chunks) | 18/25 (72.0%) | 23/25 (92.0%) | 65.4s | BM25 partially rescued dropped vector ranks |
+| **Hybrid (MiniLM) — Initial** | `all-MiniLM-L6-v2` | Vector + BM25 + RRF (409 chunks) | 20/25 (80.0%) | 23/25 (92.0%) | ~6.0s | Pre-chunking fix (Q9 & Q19 swallowed) |
+| **Hybrid (MiniLM) — Current ⭐** | `all-MiniLM-L6-v2` | Vector + BM25 + RRF (531 chunks) | **21/25 (84.0%)** | **25/25 (100.0%)** | **6.8s** | **Full index, all articles recovered, 0 regressions** |
 
 ---
 

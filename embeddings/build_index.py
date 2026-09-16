@@ -16,7 +16,7 @@ BATCH_SIZE: int = 100
 
 
 def main() -> None:
-    """Load chunked articles and overview summaries, embed with MiniLM, and store in ChromaDB."""
+    """Load chunked articles and overview summaries, embed with sentence-transformers, and store in ChromaDB."""
     # --- Load chunks ---
     print("Loading chunked articles...")
     with open(ARTICLES_PATH, "r", encoding="utf-8") as f:
