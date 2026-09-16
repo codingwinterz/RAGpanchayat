@@ -8,9 +8,12 @@ A domain-locked Retrieval-Augmented Generation (RAG) assistant that strictly ans
 
 ```mermaid
 flowchart TD
-    User([User Question]) --> Retriever[app/retriever.py\nEmbed query via all-MiniLM-L6-v2]
-    Retriever --> Chroma[ChromaDB chroma_db/\nCosine Similarity Search top-k=5]
-    Chroma --> Decision{Top Distance > 0.75?}
+    User([User Question]) --> Retriever[app/retriever.py\nHybrid: all-MiniLM-L6-v2 + BM25 via RRF]
+    Retriever --> Chroma[ChromaDB chroma_db/\nVector Cosine Similarity top-k=20]
+    Retriever --> BM25[rank_bm25\nBM25 Keyword Search top-k=20]
+    Chroma --> RRF[Reciprocal Rank Fusion\nk=60 + Distance Tiebreaker]
+    BM25 --> RRF
+    RRF --> Decision{Top Distance > 0.75?}
     Decision -- Yes --> Fallback["I don't have information on that in the Constitution."\n(Skips LLM call completely)]
     Decision -- No --> Prompt[app/prompt.py\nGrounded Prompt + Gemini 3.6 Flash]
     Prompt --> API[app/main.py\nJSON Response with answer, cited_articles, retrieved_sources]
@@ -38,7 +41,7 @@ flowchart TD
 │   └── build_index.py            # Embeds articles + overview chunks into local ChromaDB
 ├── app/
 │   ├── main.py                   # FastAPI backend with /ask and /health endpoints
-│   ├── retriever.py              # Semantic similarity retriever with source prioritization
+│   ├── retriever.py              # Hybrid retriever (MiniLM vector + BM25 keyword search via RRF)
 │   └── prompt.py                 # Gemini prompt construction, grounding, & citation parser
 ├── eval/
 │   ├── qa_pairs.json             # 25 benchmark QA pairs across constitutional topics
@@ -193,9 +196,18 @@ Run the automated retrieval evaluation over the 25 benchmark QA pairs:
 python eval/run_eval.py
 ```
 
-### Benchmark Results
-- **Top-1 Retrieval Accuracy:** **76.0%** (19/25 questions match exact target article at Rank #1)
+### Benchmark Results (Hybrid Search with MiniLM + BM25 + RRF)
+- **Top-1 Retrieval Accuracy:** **80.0%** (20/25 questions match exact target article at Rank #1)
 - **Top-5 Retrieval Accuracy:** **92.0%** (23/25 questions retrieve the target article within top 5)
+
+### Configuration Comparison
+
+| Configuration | Model | Method | Top-1 Accuracy | Top-5 Accuracy | Index Build Time |
+|---|---|---|---|---|---|
+| **Original Baseline** | `all-MiniLM-L6-v2` | Pure Vector | 19/25 (76.0%) | 23/25 (92.0%) | ~8.0s |
+| **Hybrid (MiniLM) ⭐** | `all-MiniLM-L6-v2` | Vector + BM25 + RRF | **20/25 (80.0%)** | **23/25 (92.0%)** | **6.0s** |
+| **Pure Vector (mpnet)** | `all-mpnet-base-v2` | Pure Vector | 16/25 (64.0%) | 22/25 (88.0%) | 65.4s |
+| **Hybrid (mpnet)** | `all-mpnet-base-v2` | Vector + BM25 + RRF | 18/25 (72.0%) | 23/25 (92.0%) | 65.4s |
 
 ---
 
