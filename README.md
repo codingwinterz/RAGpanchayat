@@ -8,16 +8,16 @@ A domain-locked Retrieval-Augmented Generation (RAG) assistant that strictly ans
 
 ```mermaid
 flowchart TD
-    User([User Question]) --> Retriever[app/retriever.py\nHybrid: all-MiniLM-L6-v2 + BM25 via RRF]
-    Retriever --> Chroma[ChromaDB chroma_db/\nVector Cosine Similarity top-k=20]
-    Retriever --> BM25[rank_bm25\nBM25 Keyword Search top-k=20]
-    Chroma --> RRF[Reciprocal Rank Fusion\nk=60 + Distance Tiebreaker]
+    User([User Question]) --> Retriever["app/retriever.py: Hybrid (all-MiniLM-L6-v2 + BM25 via RRF)"]
+    Retriever --> Chroma[("ChromaDB: Vector Cosine Similarity top-k=20")]
+    Retriever --> BM25["rank_bm25: BM25 Keyword Search top-k=20"]
+    Chroma --> RRF["Reciprocal Rank Fusion (k=60 + Distance Tiebreaker)"]
     BM25 --> RRF
     RRF --> Decision{Top Distance > 0.75?}
-    Decision -- Yes --> Fallback["I don't have information on that in the Constitution."\n(Skips LLM call completely)]
-    Decision -- No --> Prompt[app/prompt.py\nGrounded Prompt + Gemini 3.6 Flash]
-    Prompt --> API[app/main.py\nJSON Response with answer, cited_articles, retrieved_sources]
-    API --> UI[demo/streamlit_app.py\nInteractive Chat UI]
+    Decision -- Yes --> Fallback["Return fallback message: Skips LLM call completely"]
+    Decision -- No --> Prompt["app/prompt.py: Grounded Prompt + Gemini 3.6 Flash"]
+    Prompt --> API["app/main.py: JSON Response with answer, cited_articles, retrieved_sources"]
+    API --> UI["demo/streamlit_app.py: Interactive Chat UI"]
 ```
 
 ---
