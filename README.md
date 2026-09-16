@@ -2,7 +2,6 @@
 
 A domain-locked Retrieval-Augmented Generation (RAG) assistant that strictly answers legal queries from the official **Constitution of India**, cites verified Article numbers, and rejects out-of-scope queries using distance guardrails.
 
----
 
 ## 🏛️ System Architecture
 
@@ -48,6 +47,9 @@ flowchart TD
 │   └── run_eval.py               # Evaluation benchmark script measuring Top-1 and Top-k accuracy
 ├── demo/
 │   └── streamlit_app.py          # Streamlit chat interface with citation badges & source inspector
+├── docs/
+│   ├── streamlit-landing.png     # Landing screen screenshot used in this README
+│   └── streamlit-demo.png        # Q&A example screenshot used in this README
 ├── requirements.txt              # Project dependencies
 ├── .env.example                  # Environment variable template
 ├── .gitignore                    # Git ignore file for secrets, venv, and vector DB
