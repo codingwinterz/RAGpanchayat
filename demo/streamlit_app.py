@@ -1,8 +1,11 @@
 """Streamlit Chat Interface for the Constitution of India RAG Chatbot."""
 
+import os
 # pyrefly: ignore [missing-import]
 import streamlit as st
 import requests
+
+DEFAULT_BACKEND_URL = os.getenv("BACKEND_API_URL", "http://127.0.0.1:8000/ask")
 
 st.set_page_config(
     page_title="Constitution of India — RAG Assistant",
@@ -19,7 +22,7 @@ st.caption(
 # Sidebar configuration
 with st.sidebar:
     st.header("⚙️ Configuration")
-    api_url = st.text_input("Backend API Endpoint", value="http://127.0.0.1:8000/ask")
+    api_url = st.text_input("Backend API Endpoint", value=DEFAULT_BACKEND_URL)
     health_url = api_url.replace("/ask", "/health")
 
     # Quick health check

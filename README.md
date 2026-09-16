@@ -190,6 +190,44 @@ Navigate to `http://localhost:8501`. Features include:
 
 ---
 
+## 🐳 Running with Docker
+
+As an alternative to manual virtual environment setup, you can build and run both the FastAPI backend and Streamlit frontend using Docker and Docker Compose.
+
+### 1. Prerequisites & Environment Setup
+
+Ensure Docker and Docker Compose are installed. Copy `.env.example` to `.env` and set your Gemini API key:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env`:
+```env
+GEMINI_API_KEY=your_actual_gemini_api_key_here
+```
+
+### 2. Build and Start Services
+
+Run Docker Compose to build images and launch containers:
+
+```bash
+docker-compose up --build
+```
+*(or `docker compose up --build`)*
+
+This starts two services:
+- **FastAPI Backend:** Exposed at `http://localhost:8000` (container name `backend`)
+- **Streamlit Frontend:** Exposed at `http://localhost:8501` (container name `streamlit`), pre-configured to communicate with the FastAPI backend over Docker's internal network.
+
+To stop the running services:
+
+```bash
+docker-compose down
+```
+
+---
+
 ## 📊 Evaluation Benchmark
 
 Run the automated retrieval evaluation over the 25 benchmark QA pairs:
