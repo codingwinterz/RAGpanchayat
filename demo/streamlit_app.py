@@ -101,22 +101,38 @@ if prompt:
                     data = response.json()
                     answer = data.get("answer", "No answer received.")
                     cited = data.get("cited_articles", [])
+                    verified = data.get("verified_articles", [])
+                    unverified = data.get("unverified_articles", [])
                     sources = data.get("retrieved_sources", [])
 
                     st.markdown(answer)
 
                     if cited:
-                        st.markdown(
-                            "**Cited Articles:** "
-                            + " ".join([f"`Article {c}`" for c in cited])
+                        unverified_set = set(unverified)
+                        badges = " ".join(
+                            f"`Article {c}` ✅" if (c in verified or c not in unverified_set)
+                            else f"`Article {c}` ⚠️"
+                            for c in cited
                         )
+                        st.markdown(f"**Cited Articles:** {badges}")
+
+                    if unverified:
+                        st.warning(
+                            "⚠️ Some cited articles ("
+                            + ", ".join(f"Article {c}" for c in unverified)
+                            + ") were not in the retrieved context — treat them with caution."
+                            )
 
                     if sources:
                         with st.expander("🔍 Retrieved Source Excerpts"):
                             for s in sources:
+                                if s.get("retrieval") == "keyword_only" or s.get("distance") is None:
+                                    dist_text = "BM25 keyword-only hit"
+                                else:
+                                    dist_text = f"distance: {s.get('distance')}"
                                 st.markdown(
                                     f"- **Article {s.get('article_number')}:** {s.get('title')} "
-                                    f"*(distance: {s.get('distance', 'N/A')})*"
+                                    f"*({dist_text})*"
                                 )
 
                     st.session_state.messages.append({

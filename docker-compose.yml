@@ -8,6 +8,14 @@ services:
       - "8000:8000"
     env_file:
       - .env
+    restart: unless-stopped
+    healthcheck:
+      # python:3.12-slim ships no curl/wget, so use the stdlib for the probe.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
 
   streamlit:
     build:
@@ -18,5 +26,7 @@ services:
       - "8501:8501"
     environment:
       - BACKEND_API_URL=http://backend:8000/ask
+    restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy

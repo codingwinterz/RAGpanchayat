@@ -1,262 +1,250 @@
-# Constitution of India — Domain-Locked RAG Chatbot
+# Constitution of India — Domain-Locked RAG Assistant
 
-A domain-locked Retrieval-Augmented Generation (RAG) assistant that strictly answers legal queries from the official **Constitution of India**, cites verified Article numbers, and rejects out-of-scope queries using distance guardrails.
+![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.141-009688?logo=fastapi&logoColor=white)
+![Streamlit](https://img.shields.io/badge/Streamlit-1.63-FF4B4B?logo=streamlit&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-25%20passing-brightgreen)
+![License](https://img.shields.io/badge/license-MIT-blue)
 
+A retrieval-augmented generation (RAG) assistant that answers legal queries **strictly from the official Constitution of India**, cites article numbers **verified against the retrieved context**, and deterministically rejects out-of-scope queries — no LLM call, no hallucinated answers.
 
-## 🏛️ System Architecture
-
-```mermaid
-flowchart TD
-    User([User Question]) --> Retriever["app/retriever.py: Hybrid (all-MiniLM-L6-v2 + BM25 via RRF)"]
-    Retriever --> Chroma[("ChromaDB: Vector Cosine Similarity top-k=20")]
-    Retriever --> BM25["rank_bm25: BM25 Keyword Search top-k=20"]
-    Chroma --> RRF["Reciprocal Rank Fusion (k=60 + Distance Tiebreaker)"]
-    BM25 --> RRF
-    RRF --> Decision{Top Distance > 0.75?}
-    Decision -- Yes --> Fallback["Return fallback message: Skips LLM call completely"]
-    Decision -- No --> Prompt["app/prompt.py: Grounded Prompt + Gemini 3.6 Flash"]
-    Prompt --> API["app/main.py: JSON Response with answer, cited_articles, retrieved_sources"]
-    API --> UI["demo/streamlit_app.py: Interactive Chat UI"]
-```
+**Benchmark: 84% Top-1 / 100% Top-5 retrieval accuracy** across 25 curated QA pairs.
 
 ---
 
-## 📂 Project Structure
+## Features
+
+- **Hybrid retrieval** — dense vector search (all-MiniLM-L6-v2 via ChromaDB) fused with BM25 keyword search through Reciprocal Rank Fusion (k=60)
+- **Citation verification** — every article citation in an answer is checked against the retrieved context; unverified citations are flagged in the API response and the UI
+- **Deterministic out-of-scope guardrail** — queries whose best vector match exceeds a cosine distance of 0.75 are answered with a fixed fallback, skipping the LLM entirely
+- **Amendment disambiguation** — chunks from appended Amendment Acts are tagged and de-prioritized in favor of main-body articles
+- **Interactive demo UI** — Streamlit chat with health indicator, sample queries, ✅/⚠️ citation badges, and a source inspector
+- **Evaluated** — reproducible retrieval benchmark with 25 hand-crafted QA pairs and a configuration comparison history
+
+## System Architecture
+
+```mermaid
+flowchart TD
+    User([User Question]) --> API["app/main.py — FastAPI /ask"]
+    API --> Retriever["app/retriever.py — Hybrid Retrieval"]
+    Retriever --> Chroma[("ChromaDB — cosine similarity, top-20")]
+    Retriever --> BM25["rank_bm25 — keyword search, top-20"]
+    Chroma --> RRF["Reciprocal Rank Fusion (k=60, distance tiebreaker)"]
+    BM25 --> RRF
+    RRF --> Guard{"Best vector distance > 0.75?"}
+    Guard -- "Yes" --> Fallback["Deterministic fallback — LLM skipped"]
+    Guard -- "No" --> Prompt["app/prompt.py — grounded prompt + Gemini"]
+    Prompt --> Verify["Citation verification vs. retrieved context"]
+    Verify --> Response["JSON: answer, cited / verified / unverified articles, sources"]
+    Response --> UI["demo/streamlit_app.py — chat UI with citation badges"]
+```
+
+## Project Structure
 
 ```
 .
 ├── data/
 │   ├── constitution.pdf          # Official Constitution of India PDF (diglot edition)
 │   ├── constitution_raw.txt      # Raw extracted text from PDF
-│   ├── articles_chunked.json     # 531 extracted article chunks (includes previously-missing articles like 21A, 72, and GST/municipal provisions recovered via a chunking regex fix)
-│   └── overview_chunks.json      # 5 hand-written overview chunks for broad/summary topics
+│   ├── articles_chunked.json     # 531 article chunks (incl. 21A, 72, GST/municipal provisions)
+│   └── overview_chunks.json      # 5 curated overview chunks for broad/summary topics
 ├── ingestion/
-│   ├── extract_text.py           # Extracts text from PDF to constitution_raw.txt
-│   └── chunk_by_article.py       # Regex chunking into articles (tags main_body vs amendment_act)
-├── scripts/
-│   ├── check_chunks.py           # Diagnostic verification script for chunk quality
-│   └── test_ask.py               # Test script sending queries to the FastAPI /ask endpoint
+│   ├── extract_text.py           # PDF → constitution_raw.txt
+│   └── chunk_by_article.py       # Regex chunking into articles (main_body vs amendment_act)
 ├── embeddings/
-│   └── build_index.py            # Embeds articles + overview chunks into local ChromaDB
+│   └── build_index.py            # Embeds chunks into the local ChromaDB index
 ├── app/
-│   ├── main.py                   # FastAPI backend with /ask and /health endpoints
-│   ├── retriever.py              # Hybrid retriever (MiniLM vector + BM25 keyword search via RRF)
-│   └── prompt.py                 # Gemini prompt construction, grounding, & citation parser
+│   ├── main.py                   # FastAPI backend (/ask, /health)
+│   ├── retriever.py              # Hybrid retriever (MiniLM vector + BM25 via RRF)
+│   └── prompt.py                 # Gemini prompt construction, citation parsing & verification
 ├── eval/
 │   ├── qa_pairs.json             # 25 benchmark QA pairs across constitutional topics
-│   └── run_eval.py               # Evaluation benchmark script measuring Top-1 and Top-k accuracy
+│   └── run_eval.py               # Retrieval benchmark (Top-1 / Top-k accuracy)
 ├── demo/
-│   └── streamlit_app.py          # Streamlit chat interface with citation badges & source inspector
-├── docs/
-│   ├── streamlit-landing.png     # Landing screen screenshot used in this README
-│   └── streamlit-demo.png        # Q&A example screenshot used in this README
-├── requirements.txt              # Project dependencies
+│   └── streamlit_app.py          # Streamlit chat interface
+├── scripts/
+│   ├── check_chunks.py           # Chunk quality diagnostics
+│   └── test_ask.py               # Manual smoke test for the /ask endpoint
+├── tests/
+│   └── test_rag.py               # Unit tests (citation parsing, guardrails, fusion, chunker)
+├── docs/                         # Screenshots used in this README
+├── requirements.txt
 ├── .env.example                  # Environment variable template
-├── .gitignore                    # Git ignore file for secrets, venv, and vector DB
 └── README.md
 ```
 
----
+## Quickstart
 
-## 🚀 Setup & Installation
-
-### 1. Clone & Environment Setup
-
-Clone the repository and set up a Python virtual environment:
-
-```powershell
-# Windows (PowerShell)
-git clone <repository-url>
-cd RAG
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-```
+### 1. Clone and set up a virtual environment
 
 ```bash
-# macOS / Linux
 git clone <repository-url>
-cd RAG
+cd RAGpanchayat
+
+# Windows (PowerShell)
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+
+# macOS / Linux
 python3 -m venv venv
 source venv/bin/activate
 ```
 
-Install the dependencies:
+Install dependencies:
 
-```powershell
+```bash
 pip install -r requirements.txt
 ```
 
-### 2. Configure Gemini API Key
+### 2. Configure environment variables
 
-Copy `.env.example` to `.env` and set your Google Gemini API key:
-
-```powershell
-Copy-Item .env.example .env
+```bash
+cp .env.example .env   # Windows: Copy-Item .env.example .env
 ```
 
 Edit `.env`:
+
 ```env
 GEMINI_API_KEY=your_actual_gemini_api_key_here
 ```
 
----
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `GEMINI_API_KEY` | Yes | — | Google Gemini API key ([get one here](https://aistudio.google.com/apikey)) |
+| `GEMINI_MODEL` | No | `gemini-3.6-flash` | Generation model identifier |
+| `ALLOWED_ORIGINS` | No | `http://localhost:8501,http://127.0.0.1:8501` | CORS allow-list for the backend |
+| `ENABLE_BM25` | No | `1` | Set to `0` to disable the keyword channel (pure vector mode) |
+| `BACKEND_API_URL` | No | `http://127.0.0.1:8000/ask` | Backend URL used by the Streamlit demo |
 
-## 🔄 Running the Ingestion & Embedding Pipeline
+## Ingestion & Embedding Pipeline
 
-*(Note: Pre-extracted chunks in `data/` and the `chroma_db/` index are included, but you can regenerate them anytime)*
+Pre-extracted chunks and the vector index are included in the repository, but the pipeline can be regenerated end-to-end:
 
-Run the pipeline steps in order:
+```bash
+python ingestion/extract_text.py      # 1. Extract text from the source PDF
+python ingestion/chunk_by_article.py  # 2. Chunk into structured articles
+python scripts/check_chunks.py        # 3. Verify chunk quality & integrity
+python embeddings/build_index.py      # 4. Build the ChromaDB index (536 vectors)
+```
 
-1. **Extract text from the source PDF**:
-   ```powershell
-   python ingestion/extract_text.py
-   ```
+## Running the Backend
 
-2. **Chunk into structured articles**:
-   ```powershell
-   python ingestion/chunk_by_article.py
-   ```
-
-3. **Verify chunk quality & integrity**:
-   ```powershell
-   python scripts/check_chunks.py
-   ```
-
-4. **Build the persistent vector index in ChromaDB**:
-   ```powershell
-   python embeddings/build_index.py
-   ```
-   *(Loads both `data/articles_chunked.json` and `data/overview_chunks.json`, indexing 536 total vectors).*
-
----
-
-## ⚡ Starting the FastAPI Backend
-
-Launch the FastAPI backend with Uvicorn:
-
-```powershell
+```bash
 uvicorn app.main:app --reload --port 8000
 ```
 
-- **Base URL:** `http://127.0.0.1:8000`
-- **Interactive Swagger Docs:** `http://127.0.0.1:8000/docs`
-- **Health Check:** `http://127.0.0.1:8000/health`
+- **Base URL:** http://127.0.0.1:8000
+- **Interactive docs:** http://127.0.0.1:8000/docs
+- **Health check:** http://127.0.0.1:8000/health
 
-### Quick API Verification
+### API Reference
 
-In another terminal, test the `/ask` endpoint using the test script:
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/ask` | Answer a question grounded in the Constitution |
+| `GET` | `/health` | Service health check |
 
-```powershell
-python scripts/test_ask.py
+**Request:**
+
+```json
+{ "question": "What does Article 21 say?" }
 ```
 
-Or via `curl` / PowerShell:
-```powershell
-Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/ask" `
-  -Headers @{"Content-Type"="application/json"} `
-  -Body '{"question": "What does Article 21 say?"}'
-```
+**Response:**
 
-**Response format**:
 ```json
 {
   "answer": "According to Article 21, no person shall be deprived of his life or personal liberty except according to procedure established by law.",
   "cited_articles": ["21"],
+  "verified_articles": ["21"],
+  "unverified_articles": [],
   "retrieved_sources": [
     {
       "article_number": "21",
       "title": "Protection of life and personal liberty",
-      "distance": 0.4662
+      "distance": 0.4662,
+      "retrieval": "hybrid"
     }
   ]
 }
 ```
 
----
+`retrieved_sources[].distance` is the cosine distance (lower is better). Sources found exclusively by the BM25 keyword channel are marked `"retrieval": "keyword_only"` and have no vector distance. Quick smoke test against a running server:
 
-## 🖥️ Running the Streamlit Demo UI
+```bash
+python scripts/test_ask.py
+```
 
-With the FastAPI server running, launch the interactive Streamlit interface:
+## Running the Demo UI
 
-```powershell
+With the backend running:
+
+```bash
 streamlit run demo/streamlit_app.py
 ```
 
-Navigate to `http://localhost:8501`. Features include:
-- Backend health status indicator
-- Clickable sample queries for common constitutional topics
-- Formatted answers with verified article citation tags
-- Collapsible source cards displaying retrieved context articles and cosine distances
+Then open http://localhost:8501. The UI shows backend health, clickable sample queries, answers with ✅/⚠️ citation badges, and collapsible source cards with distances.
 
----
-
-## 🐳 Running with Docker
-
-As an alternative to manual virtual environment setup, you can build and run both the FastAPI backend and Streamlit frontend using Docker and Docker Compose.
-
-### 1. Prerequisites & Environment Setup
-
-Ensure Docker and Docker Compose are installed. Copy `.env.example` to `.env` and set your Gemini API key:
+## Running with Docker
 
 ```bash
-cp .env.example .env
+cp .env.example .env    # then set GEMINI_API_KEY
+docker compose up --build
 ```
 
-Edit `.env`:
-```env
-GEMINI_API_KEY=your_actual_gemini_api_key_here
-```
+- **FastAPI backend:** http://localhost:8000 (container `backend`, health-checked)
+- **Streamlit frontend:** http://localhost:8501 (container `streamlit`, starts only after the backend is healthy)
 
-### 2. Build and Start Services
+Stop with `docker compose down`.
 
-Run Docker Compose to build images and launch containers:
+## Testing
+
+The backend ships with a unit-test suite that runs offline (no model download, no API calls):
 
 ```bash
-docker-compose up --build
+python -m unittest discover -s tests -v
 ```
-*(or `docker compose up --build`)*
 
-This starts two services:
-- **FastAPI Backend:** Exposed at `http://localhost:8000` (container name `backend`)
-- **Streamlit Frontend:** Exposed at `http://localhost:8501` (container name `streamlit`), pre-configured to communicate with the FastAPI backend over Docker's internal network.
+Coverage includes citation parsing (lists, sub-articles, compound suffixes such as `243ZG`), citation verification, the distance guardrail's keyword-only exemption, RRF fusion and deduplication, and the chunker's footnote filter.
 
-To stop the running services:
+## Evaluation Benchmark
 
 ```bash
-docker-compose down
-```
-
----
-
-## 📊 Evaluation Benchmark
-
-Run the automated retrieval evaluation over the 25 benchmark QA pairs:
-
-```powershell
 python eval/run_eval.py
 ```
 
-### Benchmark Results (Hybrid Search with MiniLM + BM25 + RRF)
-- **Top-1 Retrieval Accuracy:** **84.0%** (21/25)
-- **Top-5 Retrieval Accuracy:** **100.0%** (25/25)
+**Current configuration** (Hybrid MiniLM + BM25 + RRF, fixed chunking regex):
+
+- **Top-1 Retrieval Accuracy: 21/25 (84.0%)**
+- **Top-5 Retrieval Accuracy: 25/25 (100.0%)**
 
 ### Configuration Comparison
 
 | Configuration | Embedding Model | Retrieval Method | Top-1 Accuracy | Top-5 Accuracy | Index Build Time |
 |---|---|---|---|---|---|
-| **Original Baseline** | `all-MiniLM-L6-v2` | Pure Vector | 19/25 (76.0%) | 23/25 (92.0%) | ~8.0s |
-| **Pure Vector (mpnet)** | `all-mpnet-base-v2` | Pure Vector | 16/25 (64.0%) | 22/25 (88.0%) | 65.4s |
-| **Hybrid (mpnet)** | `all-mpnet-base-v2` | Vector + BM25 + RRF | 18/25 (72.0%) | 23/25 (92.0%) | 65.4s |
-| **Hybrid (MiniLM)** | `all-MiniLM-L6-v2` | Vector + BM25 + RRF | 20/25 (80.0%) | 23/25 (92.0%) | ~6.0s |
-| **Hybrid (MiniLM) + chunking fix ⭐** | `all-MiniLM-L6-v2` | Vector + BM25 + RRF, fixed chunking regex | **21/25 (84.0%)** | **25/25 (100.0%)** | **~7s** |
+| Original baseline | `all-MiniLM-L6-v2` | Pure vector | 19/25 (76.0%) | 23/25 (92.0%) | ~8.0s |
+| Pure vector (mpnet) | `all-mpnet-base-v2` | Pure vector | 16/25 (64.0%) | 22/25 (88.0%) | 65.4s |
+| Hybrid (mpnet) | `all-mpnet-base-v2` | Vector + BM25 + RRF | 18/25 (72.0%) | 23/25 (92.0%) | 65.4s |
+| Hybrid (MiniLM) | `all-MiniLM-L6-v2` | Vector + BM25 + RRF | 20/25 (80.0%) | 23/25 (92.0%) | ~6.0s |
+| **Hybrid (MiniLM) + chunking fix** | `all-MiniLM-L6-v2` | Vector + BM25 + RRF, fixed chunking regex | **21/25 (84.0%)** | **25/25 (100.0%)** | **~7s** |
 
----
+## Guardrails & Design Notes
 
-## 🛡️ Guardrails & Known Limitations
+1. **Strict domain locking** — the system prompt forbids the model from using outside knowledge; answers must be grounded in the retrieved excerpts.
+2. **Deterministic out-of-scope fallback** — the cosine-distance threshold (0.75) applies to vector distances. If nothing relevant survives, the fixed fallback is returned without an LLM call.
+3. **Keyword-only exemption** — chunks surfaced *only* by BM25 are exempt from the distance threshold (they have no vector distance); this preserves exactly the exact-term recall that motivates hybrid search.
+4. **Citation verification** — parsed citations are checked against the retrieved context and reported as `verified_articles` / `unverified_articles`. This is a heuristic string match against retrieval, not a substitute for reading the underlying text; the UI surfaces ⚠️ warnings for unverified citations.
+5. **Broad/vague query handling** — the assistant intentionally declines subjective questions that cannot be grounded in a specific article or overview chunk.
+6. **Overview chunks** — five curated chunks cover cross-cutting topics (Fundamental Rights, Duties, Directive Principles, Government Structure, Amendments).
+7. **Amendment disambiguation** — Amendment Act chunks are labeled `source: amendment_act` and de-prioritized against main-body articles with the same number.
+8. **Complete article ingestion** — an early chunking-regex bug silently merged 122 articles (including 21A and 72) into neighbors; the fixed regex recovered all of them and raised Top-5 accuracy from 92% to 100%.
 
-1. **Strict Domain-Locking**: System prompt strictly forbids the model from extrapolating or using outside knowledge. All answers must be directly grounded in the retrieved excerpts.
-2. **Deterministic Out-of-Scope Fallback**: If the cosine distance of the closest retrieved chunk exceeds `0.75`, the query is flagged as out-of-scope and the LLM call is bypassed entirely, returning `"I don't have information on that in the Constitution."`
-3. **Broad/Vague Query Handling**: The bot is intentionally designed to decline broad, vague, or subjective questions that cannot be grounded in a specific constitutional article or overview chunk, rather than risk hallucinations.
-4. **Overview Chunks**: To support summary questions that span multiple provisions (such as "What are the important articles for Indian citizens?"), curated overview chunks (`data/overview_chunks.json`) cover Fundamental Rights, Duties, Directive Principles, Government Structure, and Constitutional Amendments.
-5. **Amendment Disambiguation**: Chunks originating from Amendment Acts are labeled with `source: amendment_act` and de-prioritized in favor of main body articles for identical article numbers.
-6. **Chunking Regex Fix & Complete Article Ingestion**: A chunking regex bug initially caused 122 articles (including 21A and 72) to be silently merged into adjacent articles rather than indexed separately. Fixing the regex to handle footnote-prefixed article numbers and abbreviation-containing titles recovered all missing articles and raised Top-5 retrieval accuracy from 92% to 100%.
+## Security Notes
+
+- API keys live only in `.env`, which is gitignored; `.env.example` contains placeholders only.
+- The backend CORS policy defaults to the local Streamlit origin; extend it with `ALLOWED_ORIGINS` when deploying.
+- The `/ask` endpoint performs no rate limiting or authentication — place it behind a gateway before exposing it publicly.
+
+## License
+
+Released under the [MIT License](LICENSE).

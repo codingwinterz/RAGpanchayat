@@ -4,8 +4,16 @@ Combines ChromaDB cosine-similarity search with BM25 keyword search using
 Reciprocal Rank Fusion (RRF).  Prioritises main_body articles over
 amendment_act articles when both appear in the results for the same article
 number.
+
+The cosine-distance out-of-scope threshold (``SIMILARITY_THRESHOLD``) applies
+to *vector* distances only.  Chunks surfaced exclusively by BM25
+(``keyword_only``) are exempt: BM25 can recall exact legal terms that
+embedding similarity misses, and discarding them solely because they lack a
+vector distance would silently remove exactly the results keyword search is
+useful for.
 """
 
+import os
 from typing import Any
 import chromadb
 import numpy as np
@@ -28,8 +36,9 @@ _RAW_TOP_K: int = 20
 # RRF constant (standard value from the original Cormack et al. paper).
 _RRF_K: int = 60
 
-# Toggle hybrid BM25 search
-ENABLE_BM25: bool = True
+# Toggle hybrid BM25 search (set ENABLE_BM25=0/false in the environment to
+# fall back to pure vector retrieval).
+ENABLE_BM25: bool = os.getenv("ENABLE_BM25", "1").strip().lower() not in ("0", "false", "no", "off")
 
 
 # ---------------------------------------------------------------------------
@@ -82,6 +91,32 @@ def _load_bm25() -> tuple[BM25Okapi, list[str], list[dict[str, Any]]]:
         tokenized_corpus = [_tokenize(doc) for doc in _bm25_docs]
         _bm25 = BM25Okapi(tokenized_corpus)
     return _bm25, _bm25_docs, _bm25_metas
+
+
+# ---------------------------------------------------------------------------
+# Distance guardrail
+# ---------------------------------------------------------------------------
+
+def _passes_distance_filter(
+    chunk: dict[str, Any], threshold: float = SIMILARITY_THRESHOLD
+) -> bool:
+    """Decide whether a candidate chunk may be returned to the caller.
+
+    Keyword-only chunks (BM25 hits with no vector distance) always pass:
+    their placeholder distance is meaningless, and BM25 recall is the whole
+    point of the hybrid retriever.  Everything else must be within the
+    cosine-distance out-of-scope threshold.
+
+    Args:
+        chunk: Candidate chunk dict with ``distance`` and ``keyword_only`` keys.
+        threshold: Maximum allowed cosine distance (lower is better).
+
+    Returns:
+        True if the chunk may be surfaced to the caller.
+    """
+    if chunk.get("keyword_only"):
+        return True
+    return chunk["distance"] <= threshold
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +180,7 @@ def _reciprocal_rank_fusion(
         # otherwise fall back to the BM25-only candidate.
         candidate = dict(vec_by_key.get(key) or bm25_by_key[key])
         candidate["rrf_score"] = round(rrf_score, 6)
+        candidate["keyword_only"] = key not in vec_rank
         fused.append(candidate)
 
     fused.sort(key=lambda c: (c["rrf_score"], -c["distance"]), reverse=True)
@@ -171,7 +207,7 @@ def retrieve(question: str, top_k: int = 5) -> list[dict[str, Any]]:
 
             [{"article_number": "21", "title": "...", "text": "...",
               "source": "main_body", "distance": 0.42,
-              "rrf_score": 0.032}, ...]
+              "rrf_score": 0.032, "keyword_only": False}, ...]
     """
     model, collection = _load()
 
@@ -199,6 +235,7 @@ def retrieve(question: str, top_k: int = 5) -> list[dict[str, Any]]:
             "source": meta.get("source", "main_body"),
             "text": doc,
             "distance": round(dist, 4),
+            "keyword_only": False,
         })
 
     if ENABLE_BM25:
@@ -224,7 +261,8 @@ def retrieve(question: str, top_k: int = 5) -> list[dict[str, Any]]:
                 "title": meta["title"],
                 "source": meta.get("source", "main_body"),
                 "text": bm25_docs[idx],
-                "distance": 1.0,  # placeholder — will be overwritten by RRF if also in vector results
+                "distance": 1.0,  # placeholder — vector distance is unknown for keyword-only hits
+                "keyword_only": True,
             })
 
         # ------------------------------------------------------------------
@@ -256,5 +294,5 @@ def retrieve(question: str, top_k: int = 5) -> list[dict[str, Any]]:
     # ------------------------------------------------------------------
     # 5. Filter by threshold and trim to top_k
     # ------------------------------------------------------------------
-    filtered = [c for c in ranked if c["distance"] <= SIMILARITY_THRESHOLD]
+    filtered = [c for c in ranked if _passes_distance_filter(c)]
     return filtered[:top_k]
